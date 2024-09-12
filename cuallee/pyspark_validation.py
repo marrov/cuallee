@@ -8,6 +8,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import Window as W
 from pyspark.sql import Column, DataFrame, Row
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from toolz import first, valfilter, last  # type: ignore
 
 import cuallee.utils as cuallee_utils
@@ -295,7 +296,8 @@ class Compute(ComputeEngine):
             _iqr = (
                 dataframe.select(
                     F.percentile_approx(
-                        f"`{rule.column}`", rule.value  # type: ignore
+                        f"`{rule.column}`",
+                        rule.value,  # type: ignore
                     ).alias("iqr")
                 )
                 .first()
@@ -507,7 +509,9 @@ class Compute(ComputeEngine):
 
     def is_on_schedule(self, rule: Rule):
         """Validation of a datetime column between an hour interval"""
-        predicate = F.hour(F.col(f"`{rule.column}`")).between(*rule.value).cast("integer")  # type: ignore
+        predicate = (
+            F.hour(F.col(f"`{rule.column}`")).between(*rule.value).cast("integer")
+        )  # type: ignore
         self.compute_instruction = ComputeInstruction(
             predicate,
             F.sum(predicate),
@@ -535,15 +539,15 @@ class Compute(ComputeEngine):
                             F.max(F.col(f"`{rule.column}`")),  # type: ignore
                             F.expr("interval 1 day"),
                         )
-                    ).alias(
-                        f"{rule.column}"
-                    )  # type: ignore
+                    ).alias(f"{rule.column}")  # type: ignore
                 )
                 .filter(_weekdays)
                 .select(_date_only)
             )
             return full_interval.join(  # type: ignore
-                dataframe.select(_date_only), rule.column, how="left_anti"  # type: ignore
+                dataframe.select(_date_only),
+                rule.column,
+                how="left_anti",  # type: ignore
             ).select(
                 F.when(
                     F.count(f"`{rule.column}`") > 0,
@@ -599,7 +603,7 @@ class Compute(ComputeEngine):
                 ), "Please provide a Callable/Function for validation"
                 computed_frame = rule.value(dataframe)
                 assert isinstance(
-                    computed_frame, DataFrame
+                    computed_frame, (DataFrame, ConnectDataFrame)
                 ), "Custom function does not return a PySpark DataFrame"
                 assert (
                     len(computed_frame.columns) >= 1
@@ -721,7 +725,12 @@ def string_fields(dataframe: DataFrame) -> List[str]:
 def date_fields(dataframe: DataFrame) -> List[str]:
     """Filter all date data types in data frame and returns field names"""
     return set(
-        [f.name for f in dataframe.schema.fields if isinstance(f.dataType, T.DateType) or isinstance(f.dataType, T.TimestampType)]  # type: ignore
+        [
+            f.name
+            for f in dataframe.schema.fields
+            if isinstance(f.dataType, T.DateType)
+            or isinstance(f.dataType, T.TimestampType)
+        ]  # type: ignore
     )
 
 
